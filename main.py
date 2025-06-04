@@ -1,82 +1,143 @@
-from datetime import date
+"""
+Módulo principal de la aplicación de registro de gastos de viaje.
 
-from enums.tipo_gasto import TipoGasto
+Permite a los usuarios registrar un viaje (nacional o internacional), 
+agregar gastos durante las fechas del viaje, y ver reportes por día o por tipo de gasto. 
+En caso de viajes internacionales, convierte automáticamente los valores a COP.
 
+El registro se realiza por consola y la información puede mantenerse en memoria.
+"""
+
+from datetime import  datetime
 from enums.tipo_viaje import TipoViaje
-
+from enums.tipo_gasto import TipoGasto
 from enums.medio_pago import MedioPago
-
 from modelos.destino import Destino
-
 from controladores.control_viaje import ControlViaje
-
 from controladores.control_gasto import ControlGasto
-
 from controladores.control_reporte import ControlReporte
 
-# Crear destino internacional (EE.UU.)
-destino = Destino("Miami", "Florida", "Estados Unidos", "usd")
+def leer_fecha(mensaje):
+    """
+    Solicita una fecha al usuario y la valida con formato YYYY-MM-DD.
 
-# Crear controlador de viaje
-control_viaje = ControlViaje()
-control_viaje.registrar_viaje(
-    fecha_inicio=date(2025, 6, 1),
-    fecha_fin=date(2025, 6, 2),
-    presupuesto_diario=400000,  # presupuesto diario en COP
-    destino=destino,
-    tipo_viaje=TipoViaje.INTERNACIONAL
-)
+    Args:
+        mensaje (str): Mensaje a mostrar al usuario.
 
-# Obtener viaje y asociar control de gasto
-viaje = control_viaje.get_viaje()
-control_gasto = ControlGasto(viaje, control_viaje)
+    Returns:
+        date: Objeto datetime.date válido.
+    """
+    while True:
+        try:
+            entrada = input(mensaje + " (formato YYYY-MM-DD): ")
+            return datetime.strptime(entrada, "%Y-%m-%d").date()
+        except ValueError:
+            print("⚠️ Fecha inválida, intenta de nuevo.")
 
-# Registrar gastos
-print("\n--- Registro de gastos ---")
-control_gasto.registrar_gasto(
-    fecha=date(2025, 6, 1),
-    valor=50,  # USD
-    medio_pago=MedioPago.TARJETA_CREDITO,
-    tipo_gasto=TipoGasto.COMPRAS
-)
+def mostrar_menu_gastos():
+    """
+    Muestra el menú interactivo para ingresar un gasto.
 
-control_gasto.registrar_gasto(
-    fecha=date(2025, 6, 1),
-    valor=20,  # USD
-    medio_pago=MedioPago.EFECTIVO,
-    tipo_gasto=TipoGasto.ALIMENTACION
-)
+    Returns:
+        tuple: Contiene la fecha, valor, medio de pago y tipo de gasto.
+    """
+    print("\n--- Registrar gasto ---")
+    fecha = leer_fecha("Fecha del gasto")
+    valor = float(input("Valor gastado: "))
+    print("Medio de pago:\n1. Efectivo\n2. Tarjeta débito\n3. Tarjeta crédito")
+    medio_pago = {
+        "1": MedioPago.EFECTIVO,
+        "2": MedioPago.TARJETA_DEBITO,
+        "3": MedioPago.TARJETA_CREDITO
+    }[input("Selecciona opción: ")]
 
-control_gasto.registrar_gasto(
-    fecha=date(2025, 6, 2),
-    valor=80,  # USD
-    medio_pago=MedioPago.TARJETA_CREDITO,
-    tipo_gasto=TipoGasto.ALOJAMIENTO
-)
+    print("Tipo de gasto:\n1. Transporte\n2. Alojamiento\n3. Alimentación\n4. " \
+    "Entretenimiento\n5. Compras")
+    tipo_gasto = {
+        "1": TipoGasto.TRANSPORTE,
+        "2": TipoGasto.ALOJAMIENTO,
+        "3": TipoGasto.ALIMENTACION,
+        "4": TipoGasto.ENTRETENIMIENTO,
+        "5": TipoGasto.COMPRAS
+    }[input("Selecciona opción: ")]
 
-# Finalizar viaje (simulación manual, normalmente lo hace solo si la fecha actual >= fechaFin)
-print("\n--- Finalizando el viaje ---")
-control_viaje.finalizar_viaje()
+    return fecha, valor, medio_pago, tipo_gasto
 
-# Mostrar reportes
-print("\n--- Reporte por día ---")
-reporte_dia = ControlReporte.calcular_reporte_gastos_todos_los_dias(None, viaje)
-for fecha, datos in reporte_dia.items():
-    print(f"{fecha}: {datos}")
+def main():
+    """
+    Función principal que gestiona el flujo de la aplicación por consola.
 
-print("\n--- Reporte por tipo de gasto ---")
-reporte_tipo = ControlReporte.reporte_por_tipo(viaje)
-for tipo, datos in reporte_tipo.items():
-    print(f"{tipo}: {datos}")
+    Permite:
+    - Registrar un nuevo viaje.
+    - Registrar gastos durante el viaje.
+    - Generar reportes diarios y por tipo de gasto.
+    - Finalizar el viaje y bloquear nuevos registros.
+    """
+    print(" Bienvenido al registro de gastos de viaje")
 
-# Intentar registrar un nuevo gasto después de finalizar
-print("\n--- Intentar registrar gasto luego de finalizar ---")
-try:
-    control_gasto.registrar_gasto(
-        fecha=date(2025, 6, 3),
-        valor=30,
-        medio_pago=MedioPago.EFECTIVO,
-        tipo_gasto=TipoGasto.TRANSPORTE
-    )
-except Exception as e:
-    print(" Error al registrar gasto:", e)
+    # --- Registro del viaje ---
+    tipo = input("¿El viaje es nacional o internacional? (n/i): ").lower()
+    tipo_viaje = TipoViaje.NACIONAL if tipo == "n" else TipoViaje.INTERNACIONAL
+
+    ciudad = input("Ciudad destino: ")
+    departamento = input("Departamento: ")
+    pais = input("País: ")
+    moneda = input("Moneda local (ej: cop, usd, eur): ").lower()
+
+    destino = Destino(ciudad, departamento, pais, moneda)
+    fecha_inicio = leer_fecha("Fecha de inicio del viaje")
+    fecha_fin = leer_fecha("Fecha de fin del viaje")
+    presupuesto_diario = float(input("Presupuesto diario en COP: "))
+
+    control_viaje = ControlViaje()
+    control_viaje.registrar_viaje(fecha_inicio, fecha_fin, presupuesto_diario, destino, tipo_viaje)
+    viaje = control_viaje.get_viaje()
+    control_gasto = ControlGasto(viaje, control_viaje)
+
+    # --- Registro de gastos ---
+    while viaje.estado_viaje:
+        print("\n--- MENÚ ---")
+        print("1. Registrar gasto")
+        print("2. Finalizar viaje")
+        print("3. Ver reporte diario")
+        print("4. Ver reporte por tipo")
+        opcion = input("Elige una opción: ")
+
+        if opcion == "1":
+            try:
+                datos = mostrar_menu_gastos()
+                control_gasto.registrar_gasto(*datos)
+            except Exception as e:
+                print(f" Error: {e}")
+
+        elif opcion == "2":
+            control_viaje.finalizar_viaje()
+
+        elif opcion == "3":
+            reporte_dia = ControlReporte.calcular_reporte_gastos_todos_los_dias(None, viaje)
+            print("\n--- Reporte por día ---")
+            for fecha, datos in reporte_dia.items():
+                print(f"{fecha}: {datos}")
+
+        elif opcion == "4":
+            reporte_tipo = ControlReporte.reporte_por_tipo(viaje)
+            print("\n--- Reporte por tipo de gasto ---")
+            for tipo, datos in reporte_tipo.items():
+                print(f"{tipo}: {datos}")
+
+        else:
+            print(" Opción inválida")
+
+    print("\n El viaje ha sido finalizado. No se permiten más gastos.")
+    print("--- Reporte final por día ---")
+    reporte_dia = ControlReporte.calcular_reporte_gastos_todos_los_dias(None, viaje)
+    for fecha, datos in reporte_dia.items():
+        print(f"{fecha}: {datos}")
+
+    print("\n--- Reporte final por tipo ---")
+    reporte_tipo = ControlReporte.reporte_por_tipo(viaje)
+    for tipo, datos in reporte_tipo.items():
+        print(f"{tipo}: {datos}")
+
+if __name__ == "__main__":
+    main()

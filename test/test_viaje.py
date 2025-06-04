@@ -1,58 +1,94 @@
-"""
-Módulo de pruebas unitarias para la clase Viaje.
-
-Incluye la implementación de la clase Viaje y una batería de pruebas
-que validan el cálculo de la diferencia entre el presupuesto diario
-y los gastos realizados durante el viaje.
-"""
-
 import unittest
+from datetime import date
+from controladores.control_gasto import ControlGasto
+from modelos.viaje import Viaje
+from modelos.gasto import Gasto
+from enums.medio_pago import MedioPago
+from enums.tipo_gasto import TipoGasto
+from enums.tipo_viaje import TipoViaje
+from modelos.destino import Destino
 
-class Viaje:
+
+class TestCalcularDiferenciaPresupuesto(unittest.TestCase):
     """
-    Representa un viaje con funcionalidad para calcular la diferencia
-    entre el presupuesto diario y el gasto registrado.
+    Pruebas unitarias para el método calcular_diferencia_presupuesto del controlador de gastos.
+    Se evalúan distintos escenarios para validar la lógica de diferencia entre presupuesto
+    y gastos diarios en pesos colombianos.
     """
 
-    def calcular_diferencias_gastos(self, valor_cop: float, presupuesto_diario: float) -> float:
+    def crear_control_gasto(self, valor_cop, presupuesto_diario):
         """
-        Calcula la diferencia entre el presupuesto diario y el gasto realizado.
+        Crea un objeto ControlGasto con un gasto registrado en una fecha específica.
 
         Args:
-            valor_cop (float): Valor del gasto en pesos colombianos.
-            presupuesto_diario (float): Monto asignado como presupuesto para ese día.
+            valor_cop (float): Valor del gasto en COP. Si es None, no se registra ningún gasto.
+            presupuesto_diario (float): Presupuesto diario asignado al viaje.
 
         Returns:
-            float: Diferencia entre presupuesto y gasto. Positiva si se ahorra,
-                   cero si el gasto es exacto, negativa si se sobrepasa.
+            ControlGasto: Instancia inicializada para pruebas.
         """
-        return presupuesto_diario - valor_cop
+        viaje = Viaje(
+            fecha_inicio=date(2025, 6, 1),
+            fecha_fin=date(2025, 6, 10),
+            presupuesto_diario=presupuesto_diario,
+            destino=Destino("Bogotá", "Cundinamarca", "Colombia", "COP"),
+            tipo_viaje=TipoViaje.NACIONAL
+        )
+        control = ControlGasto(viaje, None)
 
+        if valor_cop is not None:
+            gasto = Gasto(
+                fecha=date(2025, 6, 2),
+                valor=valor_cop,
+                medio_pago=MedioPago.EFECTIVO,
+                tipo_gasto=TipoGasto.ALIMENTACION,
+                valor_cop=valor_cop
+            )
+            viaje.agregar_gasto(gasto)
 
-class TestDiferenciaPresupuesto(unittest.TestCase):
-    """
-    Conjunto de pruebas unitarias para validar el método calcular_diferencias_gastos
-    de la clase Viaje.
-    """
+        return control
 
-    def setUp(self):
-        """Inicializa una instancia de Viaje para usar en las pruebas."""
-        self.viaje = Viaje()
+    def test_1_gasto_menor_presupuesto(self):
+        """Debe retornar diferencia positiva si el gasto es menor al presupuesto."""
+        control = self.crear_control_gasto(80000, 100000)
+        self.assertEqual(control.calcular_diferencia_presupuesto(date(2025, 6, 2)), 20000)
 
-    def test_diferencia_positiva_si_gasto_menor(self):
-        """Debe mostrar diferencia positiva si se gasta menos del presupuesto."""
-        resultado = self.viaje.calcular_diferencias_gastos(80000, 100000)
-        self.assertGreater(resultado, 0)
+    def test_2_gasto_igual_presupuesto(self):
+        """Debe retornar cero si el gasto es igual al presupuesto."""
+        control = self.crear_control_gasto(100000, 100000)
+        self.assertEqual(control.calcular_diferencia_presupuesto(date(2025, 6, 2)), 0)
 
-    def test_diferencia_cero_si_gasto_igual(self):
-        """Debe mostrar diferencia cero si se gasta exactamente el presupuesto."""
-        resultado = self.viaje.calcular_diferencias_gastos(100000, 100000)
-        self.assertEqual(resultado, 0)
+    def test_3_gasto_mayor_presupuesto(self):
+        """Debe retornar diferencia negativa si el gasto excede el presupuesto."""
+        control = self.crear_control_gasto(120000, 100000)
+        self.assertEqual(control.calcular_diferencia_presupuesto(date(2025, 6, 2)), -20000)
 
-    def test_diferencia_negativa_si_gasto_mayor(self):
-        """Debe mostrar diferencia negativa si se gasta más del presupuesto."""
-        resultado = self.viaje.calcular_diferencias_gastos(120000, 100000)
-        self.assertLess(resultado, 0)
+    def test_4_gasto_cero(self):
+        """Debe retornar el presupuesto completo si no hubo gasto."""
+        control = self.crear_control_gasto(0, 50000)
+        self.assertEqual(control.calcular_diferencia_presupuesto(date(2025, 6, 2)), 50000)
+
+    def test_5_presupuesto_cero(self):
+        """Debe retornar negativo igual al gasto si el presupuesto es cero."""
+        control = self.crear_control_gasto(50000, 0)
+        self.assertEqual(control.calcular_diferencia_presupuesto(date(2025, 6, 2)), -50000)
+
+    def test_6_gasto_y_presupuesto_cero(self):
+        """Debe retornar cero si tanto el gasto como el presupuesto son cero."""
+        control = self.crear_control_gasto(0, 0)
+        self.assertEqual(control.calcular_diferencia_presupuesto(date(2025, 6, 2)), 0)
+
+    def test_7_gasto_negativo(self):
+        """Debe lanzar ValueError si el gasto tiene valor negativo."""
+        with self.assertRaises(ValueError):
+            self.crear_control_gasto(-50000, 100000)
+
+    def test_8_presupuesto_negativo(self):
+        """Debe lanzar ValueError si el presupuesto diario es negativo."""
+        control = self.crear_control_gasto(50000, -100000)
+        with self.assertRaises(ValueError):
+            control.calcular_diferencia_presupuesto(date(2025, 6, 2))
+
 
 
 if __name__ == '__main__':

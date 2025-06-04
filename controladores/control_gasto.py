@@ -1,18 +1,11 @@
-"""
-    modulo controladora encargada de registrar y validar los gastos realizados durante un viaje.
-
-    Esta clase permite registrar nuevos gastos asociados a una fecha, calcular su conversión a pesos 
-    colombianos (COP) en caso de viajes internacionales, y verificar el cumplimiento del presupuesto
-    También lanza una excepción si se intenta registrar un gasto en un viaje finalizado.
+""""
+Controlador de gastos para un viaje.
 """
 from enums.tipo_gasto import TipoGasto
-
 from enums.medio_pago import MedioPago
-
+from enums.tipo_viaje import TipoViaje  # ✅ Importación necesaria
 from modelos.viaje import Viaje
-
 from modelos.gasto import Gasto
-
 from .control_api_moneda_intercambio import ControlAPIMonedaIntercambio
 
 class ViajeFinalizadoError(Exception):
@@ -66,7 +59,7 @@ class ControlGasto:
         if not self.viaje.estado_viaje:
             raise ViajeFinalizadoError("El viaje ha finalizado, no se pueden registrar más gastos.")
 
-        if self.viaje.tipo_viaje == "INTERNACIONAL":
+        if self.viaje.tipo_viaje == TipoViaje.INTERNACIONAL:
             moneda_destino = self.viaje.destino.get_moneda_local()
             valor_cop = ControlAPIMonedaIntercambio.convertir_moneda(moneda_destino, valor, fecha)
         else:
@@ -74,6 +67,7 @@ class ControlGasto:
 
         gasto = Gasto(fecha, valor, medio_pago, tipo_gasto, valor_cop)
         self.viaje.agregar_gasto(gasto)
+
         print(
             f"Se registró un gasto de {valor} {self.viaje.destino.get_moneda_local()} "
             f"-> {valor_cop} COP"
@@ -86,7 +80,6 @@ class ControlGasto:
         else:
             print(f"Presupuesto excedido para {fecha} por {-diferencia} COP")
 
-
     def calcular_diferencia_presupuesto(self, fecha) -> float:
         """
         Calcula la diferencia entre el presupuesto diario y los gastos realizados en una fecha.
@@ -96,6 +89,16 @@ class ControlGasto:
 
         Returns:
             float: Diferencia entre presupuesto diario y gasto total en COP.
+
+        Raises:
+            ValueError: Si el presupuesto diario o algún gasto es negativo.
         """
+        if self.viaje.presupuesto_diario < 0:
+            raise ValueError("El presupuesto diario no puede ser negativo.")
+
         total_cop = self.viaje.calcular_gasto_diario(fecha)
+
+        if total_cop < 0:
+            raise ValueError("No se permiten gastos negativos.")
+
         return self.viaje.presupuesto_diario - total_cop

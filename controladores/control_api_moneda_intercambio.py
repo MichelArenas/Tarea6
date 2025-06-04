@@ -10,78 +10,54 @@ Dependencias:
     - datetime.date: Para manejar fechas asociadas a los gastos.
 """
 
-from datetime import date
-
+from datetime import date, timedelta
 import requests
 
 class ControlAPIMonedaIntercambio:
     """
-    Clase encargada de obtener y convertir tasas de cambio entre monedas utilizando una API pública.
-
-    Métodos:
-        obtener_tasa_cambio(moneda_origen: str, fecha: date) -> float:
-            Obtiene la tasa de cambio entre la moneda de origen y COP para una fehca especifica.
-        
-        convertir_moneda(moneda_origen: str, valor: float, fecha. date) -> float:
-            Convierte un valor monetario desde la moneda de origen a COP.
+    Clase para obtener y convertir tasas de cambio usando la API de Fawaz Ahmed.
     """
     moneda_local = "cop"
+
     @staticmethod
     def obtener_tasa_cambio(moneda_destino: str, fecha: date) -> float:
         """
-        Obtiene la tasa de cambio entre la moneda de origen y 
-        COP usando la API pública de Fawaz Ahmed.
-        Usa la fecha actual para construir la URL de la API.
-
-        Args:
-            moneda_origen (str): Código de la moneda de origen (ej. 'usd', 'eur').
-            fecha (date): Fecha en la que se desea obtener la tasa de cambio.
-
-        Returns:
-            float: Tasa de cambio redondeada a 2 decimales.
-
-        Raises:
-            RuntimeError: Si ocurre un error en la solicitud o los datos no son válidos.
+        Intenta obtener la tasa de cambio para la fecha dada, y si no existe,
+        retrocede un día hasta encontrar una fecha válida.
         """
         moneda_destino = moneda_destino.lower()
-        fecha_actual = fecha.strftime("%Y-%m-%d")
-        url = (
-    f"https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@{fecha_actual}/v1/"
-    f"currencies/{moneda_destino}.json"
-)
-        try:
-            response = requests.get(url, timeout=5)
-            response.raise_for_status()  # lanza HTTPError si status_code != 200
+        intentos = 7  # intenta con máximo 7 días hacia atrás
+        while intentos > 0:
+            fecha_str = fecha.strftime("%Y-%m-%d")
+            url = (
+                f"https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@{fecha_str}/v1/"
+                f"currencies/{moneda_destino}.json"
+            )
+            try:
+                response = requests.get(url, timeout=5)
+                response.raise_for_status()
+                data = response.json()
+                tasa = data[moneda_destino][ControlAPIMonedaIntercambio.moneda_local]
+                print(f"Tasa de cambio {moneda_destino.upper()} -> COP en {fecha_str}: {tasa}")
+                return round(tasa, 2)
 
-            data = response.json()
-            tasa = data[moneda_destino][ControlAPIMonedaIntercambio.moneda_local]
-            return round(tasa, 2)
+            except requests.exceptions.HTTPError as e:
+                if response.status_code == 404:
+                    fecha -= timedelta(days=1)
+                    intentos -= 1
+                    continue  # intenta con un día anterior
+                else:
+                    print(f"[ERROR] Error HTTP: {e}")
+            except Exception as e:
+                print(f"[ERROR] Otro error: {e}")
+                break
 
-        except requests.exceptions.Timeout:
-            print("[ERROR] La solicitud a la API excedió el tiempo de espera.")
-        except requests.exceptions.HTTPError as e:
-            print(f"[ERROR] Error HTTP al acceder a la API: {e}")
-        except requests.exceptions.RequestException as e:
-            print(f"[ERROR] Error de conexión o petición a la API: {e}")
-        except KeyError:
-            print(f"[ERROR] La respuesta no contiene tasa para {moneda_destino} -> {ControlAPIMonedaIntercambio.moneda_local}")
+        raise RuntimeError("No se pudo obtener una tasa de cambio válida en los últimos días.")
 
-        raise RuntimeError("No se pudo obtener una tasa de cambio válida.")
     @staticmethod
-
-    def convertir_moneda(moneda_destino: str, valor: float, fecha:date) -> float:
+    def convertir_moneda(moneda_destino: str, valor: float, fecha: date) -> float:
         """
-        Convierte un valor monetario desde la moneda de origen a pesos colombianos (COP),
-        utilizando la tasa de cambio actual proporcionada por la API.
-
-        Args:
-            moneda_destino (str): Código de la moneda de origen (por ejemplo, 'usd', 'eur').
-            valor (float): Monto a convertir.
-             fecha (date): Fecha en la que se realizo el gasto y en base a esta se da la tasa de cambio .
-
-        Returns:
-            float: Valor convertido a COP, redondeado a 2 decimales.
+        Convierte un monto a COP usando la tasa de cambio más cercana disponible.
         """
         tasa = ControlAPIMonedaIntercambio.obtener_tasa_cambio(moneda_destino, fecha)
-        print(f"Tasa de cambio {moneda_destino.upper()} -> COPen {fecha.strftime("%Y-%m-%d")}: {tasa}")
         return round(valor * tasa, 2)
